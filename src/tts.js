@@ -1,4 +1,4 @@
-// Web Speech API Engine with Guaranteed Gujarati & Hindi Voice Fallback
+// Web Speech & Online TTS Engine with No-Referrer Policy for Gujarati
 class TextToSpeechManager {
   constructor() {
     this.synth = window.speechSynthesis || null;
@@ -60,7 +60,6 @@ class TextToSpeechManager {
   }
 
   // Transliterate Gujarati script Unicode (0x0A80-0x0AFF) to Devanagari script (0x0900-0x097F)
-  // This allows Hindi Speech Engines (built into 100% of browsers) to pronounce Gujarati words accurately!
   toDevanagari(text) {
     return text.split('').map(c => {
       const code = c.charCodeAt(0);
@@ -68,7 +67,7 @@ class TextToSpeechManager {
     }).join('');
   }
 
-  speak(text, lang = 'gu') {
+  async speak(text, lang = 'gu') {
     if (!this.enabled || !text) return;
     this.stop();
 
@@ -81,7 +80,43 @@ class TextToSpeechManager {
     if (!cleanText) return;
 
     this.isSpeaking = true;
-    this.speakWebSpeech(cleanText, lang);
+
+    if (lang === 'gu') {
+      try {
+        const encoded = encodeURIComponent(cleanText);
+        const ttsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encoded}&tl=gu&client=tw-ob`;
+        
+        // Fetch MP3 blob with referrerPolicy 'no-referrer' to bypass GitHub Pages 404 origin blocking
+        const res = await fetch(ttsUrl, { referrerPolicy: 'no-referrer' });
+        if (res.ok) {
+          const blob = await res.blob();
+          const blobUrl = URL.createObjectURL(blob);
+          
+          const audio = new Audio(blobUrl);
+          this.audioPlayer = audio;
+
+          audio.onended = () => {
+            this.isSpeaking = false;
+            URL.revokeObjectURL(blobUrl);
+          };
+
+          audio.onerror = () => {
+            URL.revokeObjectURL(blobUrl);
+            this.speakWebSpeech(cleanText, 'gu');
+          };
+
+          await audio.play();
+          return;
+        }
+      } catch (err) {
+        console.warn('Online Gujarati TTS fetch failed, using WebSpeech fallback:', err);
+      }
+
+      // WebSpeech Fallback
+      this.speakWebSpeech(cleanText, 'gu');
+    } else {
+      this.speakWebSpeech(cleanText, 'en');
+    }
   }
 
   speakWebSpeech(text, targetLang = 'gu') {
@@ -101,30 +136,27 @@ class TextToSpeechManager {
     
     let selectedVoice = null;
     let textToSpeak = text;
-    let langCode = 'hi-IN'; // Default to hi-IN so browser NEVER drops speech for missing gu-IN
+    let langCode = 'hi-IN';
 
     if (targetLang === 'gu') {
-      // 1. Look for native Gujarati voice
       selectedVoice = voices.find(v => 
         v.lang.toLowerCase().includes('gu') || 
         v.name.toLowerCase().includes('gujarati')
       );
 
       if (selectedVoice) {
-        textToSpeak = text; // Native Gujarati text
+        textToSpeak = text;
         langCode = selectedVoice.lang || 'gu-IN';
       } else {
-        // 2. Look for Hindi voice (built into 100% of Windows/Android/Chrome browsers)
         selectedVoice = voices.find(v => 
           v.lang.toLowerCase().includes('hi') || 
           v.name.toLowerCase().includes('hindi')
         );
 
         if (selectedVoice) {
-          textToSpeak = this.toDevanagari(text); // Convert Gujarati -> Devanagari script
+          textToSpeak = this.toDevanagari(text);
           langCode = selectedVoice.lang || 'hi-IN';
         } else {
-          // 3. Fallback to any Indian accent voice (e.g. en-IN)
           selectedVoice = voices.find(v => v.lang.toLowerCase().includes('in'));
           textToSpeak = this.toDevanagari(text);
           if (selectedVoice) {
@@ -135,7 +167,6 @@ class TextToSpeechManager {
         }
       }
     } else {
-      // English
       selectedVoice = voices.find(v => v.lang.toLowerCase().includes('en'));
       textToSpeak = text;
       langCode = selectedVoice ? selectedVoice.lang : 'en-US';
@@ -165,7 +196,6 @@ class TextToSpeechManager {
 
     try {
       this.synth.speak(utterance);
-      // Keep-alive fix for Chrome SpeechSynthesis freeze bug
       if (this.synth.paused) {
         this.synth.resume();
       }
