@@ -1,4 +1,4 @@
-// Web Speech & Online TTS Engine with No-Referrer Policy for Gujarati
+// Universal Web Speech & Audio TTS Engine with 3-Tier Fallback for Gujarati
 class TextToSpeechManager {
   constructor() {
     this.synth = window.speechSynthesis || null;
@@ -45,6 +45,9 @@ class TextToSpeechManager {
       try {
         this.audioPlayer.pause();
         this.audioPlayer.currentTime = 0;
+        if (this.audioPlayer.parentNode) {
+          this.audioPlayer.parentNode.removeChild(this.audioPlayer);
+        }
       } catch (e) {}
       this.audioPlayer = null;
     }
@@ -67,7 +70,27 @@ class TextToSpeechManager {
     }).join('');
   }
 
-  async speak(text, lang = 'gu') {
+  // Transliterate Gujarati to Romanized English phonetics so English SAPI voices (Microsoft David/Zira) can read it aloud!
+  toRomanized(text) {
+    const map = {
+      'અ': 'a', 'આ': 'aa', 'ઇ': 'i', 'ઈ': 'ee', 'ઉ': 'u', 'ઊ': 'oo', 'એ': 'ek', 'ઐ': 'ai', 'ઓ': 'o', 'ઔ': 'au', 'અં': 'an', 'અઃ': 'ah',
+      'ક': 'k', 'ખ': 'kh', 'ગ': 'g', 'ઘ': 'gh',
+      'ચ': 'ch', 'છ': 'chh', 'જ': 'j', 'ઝ': 'jh',
+      'ટ': 't', 'ઠ': 'th', 'ડ': 'd', 'ઢ': 'dh', 'ણ': 'n',
+      'ત': 't', 'થ': 'th', 'દ': 'd', 'ધ': 'dh', 'ન': 'n',
+      'પ': 'p', 'ફ': 'f', 'બ': 'b', 'ભ': 'bh', 'મ': 'm',
+      'ય': 'y', 'ર': 'r', 'લ': 'l', 'વ': 'v', 'શ': 'sh', 'ષ': 'sh', 'સ': 's', 'હ': 'h', 'ળ': 'l',
+      'ા': 'aa', 'િ': 'i', 'ી': 'ee', 'ુ': 'u', 'ૂ': 'oo', 'ે': 'e', 'ૈ': 'ai', 'ો': 'o', 'ૌ': 'au', 'ં': 'n', 'ઃ': 'h', '્': ''
+    };
+    let result = '';
+    for (let i = 0; i < text.length; i++) {
+      const char = text[i];
+      result += map[char] || char;
+    }
+    return result;
+  }
+
+  speak(text, lang = 'gu') {
     if (!this.enabled || !text) return;
     this.stop();
 
@@ -82,38 +105,33 @@ class TextToSpeechManager {
     this.isSpeaking = true;
 
     if (lang === 'gu') {
-      try {
-        const encoded = encodeURIComponent(cleanText);
-        const ttsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encoded}&tl=gu&client=tw-ob`;
-        
-        // Fetch MP3 blob with referrerPolicy 'no-referrer' to bypass GitHub Pages 404 origin blocking
-        const res = await fetch(ttsUrl, { referrerPolicy: 'no-referrer' });
-        if (res.ok) {
-          const blob = await res.blob();
-          const blobUrl = URL.createObjectURL(blob);
-          
-          const audio = new Audio(blobUrl);
-          this.audioPlayer = audio;
+      // Tier 1: Try HTML5 Audio element with referrerpolicy="no-referrer" attribute
+      const encoded = encodeURIComponent(cleanText);
+      const ttsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encoded}&tl=gu&client=tw-ob`;
 
-          audio.onended = () => {
-            this.isSpeaking = false;
-            URL.revokeObjectURL(blobUrl);
-          };
+      const audio = document.createElement('audio');
+      audio.setAttribute('referrerpolicy', 'no-referrer');
+      audio.src = ttsUrl;
+      this.audioPlayer = audio;
 
-          audio.onerror = () => {
-            URL.revokeObjectURL(blobUrl);
-            this.speakWebSpeech(cleanText, 'gu');
-          };
-
-          await audio.play();
-          return;
+      let fallbackTriggered = false;
+      const doFallback = () => {
+        if (!fallbackTriggered) {
+          fallbackTriggered = true;
+          this.speakWebSpeech(cleanText, 'gu');
         }
-      } catch (err) {
-        console.warn('Online Gujarati TTS fetch failed, using WebSpeech fallback:', err);
-      }
+      };
 
-      // WebSpeech Fallback
-      this.speakWebSpeech(cleanText, 'gu');
+      audio.onended = () => {
+        this.isSpeaking = false;
+      };
+
+      audio.onerror = () => doFallback();
+
+      const playPromise = audio.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(() => doFallback());
+      }
     } else {
       this.speakWebSpeech(cleanText, 'en');
     }
@@ -136,9 +154,10 @@ class TextToSpeechManager {
     
     let selectedVoice = null;
     let textToSpeak = text;
-    let langCode = 'hi-IN';
+    let langCode = 'en-US';
 
     if (targetLang === 'gu') {
+      // 1. Native Gujarati Voice
       selectedVoice = voices.find(v => 
         v.lang.toLowerCase().includes('gu') || 
         v.name.toLowerCase().includes('gujarati')
@@ -148,6 +167,7 @@ class TextToSpeechManager {
         textToSpeak = text;
         langCode = selectedVoice.lang || 'gu-IN';
       } else {
+        // 2. Native Hindi Voice with Devanagari text
         selectedVoice = voices.find(v => 
           v.lang.toLowerCase().includes('hi') || 
           v.name.toLowerCase().includes('hindi')
@@ -157,17 +177,17 @@ class TextToSpeechManager {
           textToSpeak = this.toDevanagari(text);
           langCode = selectedVoice.lang || 'hi-IN';
         } else {
-          selectedVoice = voices.find(v => v.lang.toLowerCase().includes('in'));
-          textToSpeak = this.toDevanagari(text);
-          if (selectedVoice) {
-            langCode = selectedVoice.lang;
-          } else {
-            langCode = 'hi-IN';
-          }
+          // 3. Indian English / Any Voice with Romanized Gujarati phonetics
+          selectedVoice = voices.find(v => v.lang.toLowerCase().includes('in')) || 
+                          voices.find(v => v.lang.toLowerCase().includes('en')) || 
+                          (voices.length > 0 ? voices[0] : null);
+          
+          textToSpeak = this.toRomanized(text);
+          langCode = selectedVoice ? selectedVoice.lang : 'en-US';
         }
       }
     } else {
-      selectedVoice = voices.find(v => v.lang.toLowerCase().includes('en'));
+      selectedVoice = voices.find(v => v.lang.toLowerCase().includes('en')) || (voices.length > 0 ? voices[0] : null);
       textToSpeak = text;
       langCode = selectedVoice ? selectedVoice.lang : 'en-US';
     }
