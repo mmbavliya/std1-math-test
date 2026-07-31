@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="gu">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ધોરણ ૧ ગણિત - એકમ ૧: વાંદરાં-ટોળી (રમતિયાર કસોટી)</title>
+  <meta name="description" content="ધોરણ ૧ ગણિત-ગમ્મત એકમ ૧ વાંદરાં-ટોળી માટેની રંગબેરંગી અને રમતિયાર ઇન્ટરેક્ટિવ કસોટી">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Hind+Vadodara:wght@400;600;700&family=Nunito:wght@600;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./src/style.css">
+</head>
+<body>
+  <!-- App Container -->
+  <div id="app" class="app-container">
+    
+    <!-- Top Navigation Header -->
+    <header class="game-header">
+      <div class="header-left">
+        <div class="logo-badge">
+          <span class="logo-icon">🐒</span>
+          <span class="logo-text" id="header-title">૧. વાંદરાં-ટોળી</span>
+        </div>
+        <div class="topic-chip" id="current-topic-chip">
+          <span id="topic-badge-icon">📍</span>
+          <span id="topic-badge-text">શરૂઆત</span>
+        </div>
+      </div>
+
+      <div class="header-center">
+        <!-- Progress Bar -->
+        <div class="progress-container" title="પ્રગતિ / Progress">
+          <div class="progress-bar-bg">
+            <div class="progress-fill" id="progress-fill" style="width: 0%;"></div>
+          </div>
+          <span class="progress-counter" id="progress-counter">૧ / ૭</span>
+        </div>
+      </div>
+
+      <div class="header-right">
+        <!-- Live Stars -->
+        <div class="star-badge" id="star-badge">
+          <span class="star-icon">⭐</span>
+          <span class="star-count" id="star-count">0</span>
+        </div>
+        <!-- Voice narration button -->
+        <button class="icon-btn tts-btn" id="tts-toggle-btn" title="અવાજ સાંભળો / Speak Question">
+          🔊
+        </button>
+        <!-- Sound FX Toggle -->
+        <button class="icon-btn sound-btn" id="sound-toggle-btn" title="સાઉન્ડ ઇફેક્ટ્સ / Sound Effects">
+          🎵
+        </button>
+        <!-- Language Switcher -->
+        <button class="lang-btn" id="lang-toggle-btn" title="ભાષા બદલો / Change Language">
+          <span id="lang-text">English 🌐</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Game Area -->
+    <main class="game-main">
+      
+      <!-- Welcome Screen -->
+      <section id="screen-welcome" class="game-screen active">
+        <div class="welcome-card">
+          <div class="welcome-banner">
+            <div class="mascot-avatar pulse-anim">🐵</div>
+            <h1 id="welcome-title">ધોરણ ૧ - ગણિત ગમ્મત</h1>
+            <h2 id="welcome-subtitle">એકમ ૧: વાંદરાં-ટોળી (રમતિયાર ટેસ્ટ)</h2>
+            <button class="welcome-speaker-btn" id="welcome-speak-btn" title="સૂચના સાંભળો / Listen in Gujarati">
+              🔊 અવાજ સાંભળો (Listen Voice)
+            </button>
+          </div>
+          
+          <div class="welcome-body">
+            <p class="welcome-intro" id="welcome-intro">
+              આવો! ચીંકુ વાંદરા અને તેના મિત્રો સાથે ગણિતની મજેદાર રમતો રમીએ! 🍌🌴
+            </p>
+
+            <div class="student-input-group">
+              <label for="student-name-input" id="lbl-student-name">તમારું નામ લખો (Student Name):</label>
+              <input type="text" id="student-name-input" placeholder="દા.ત. આરાધ્યા / Aarav" autocomplete="off" maxlength="30">
+            </div>
+
+            <div class="topics-preview">
+              <h3 id="lbl-topics-title">આજે આપણે શું શીખીશું? 🎯</h3>
+              <div class="topics-grid">
+                <div class="topic-tag"><span>🏠</span> <span class="t-gu">અંદર - બહાર</span></div>
+                <div class="topic-tag"><span>🌳</span> <span class="t-gu">ઉપર - નીચે</span></div>
+                <div class="topic-tag"><span>🪜</span> <span class="t-gu">સૌથી ઉપર - નીચે</span></div>
+                <div class="topic-tag"><span>☀️</span> <span class="t-gu">નજીક - દૂર</span></div>
+                <div class="topic-tag"><span>🚂</span> <span class="t-gu">આગળ - પાછળ</span></div>
+                <div class="topic-tag"><span>🚗</span> <span class="t-gu">સૌથી આગળ - પાછળ</span></div>
+                <div class="topic-tag"><span>🎨</span> <span class="t-gu">આકાર ને વર્ગીકરણ</span></div>
+              </div>
+            </div>
+
+            <button class="btn-primary start-btn" id="start-game-btn" onclick="if(window.app){ window.app.startGame(); }">
+              <span>રમત શરૂ કરો! 🚀</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Quiz Interactive Question Screen -->
+      <section id="screen-quiz" class="game-screen">
+        <div class="quiz-layout">
+          
+          <!-- Mascot Side Panel -->
+          <div class="mascot-panel">
+            <div class="mascot-container">
+              <div class="chinku-mascot" id="chinku-mascot">
+                <div class="mascot-img-wrap">
+                  <svg class="monkey-svg" viewBox="0 0 100 100">
+                    <circle cx="50" cy="50" r="38" fill="#e67e22"/>
+                    <circle cx="50" cy="52" r="30" fill="#f39c12"/>
+                    <!-- Ears -->
+                    <circle cx="16" cy="46" r="12" fill="#e67e22"/>
+                    <circle cx="16" cy="46" r="7" fill="#f39c12"/>
+                    <circle cx="84" cy="46" r="12" fill="#e67e22"/>
+                    <circle cx="84" cy="46" r="7" fill="#f39c12"/>
+                    <!-- Face -->
+                    <ellipse cx="50" cy="58" rx="22" ry="16" fill="#ffeaa7"/>
+                    <!-- Eyes -->
+                    <circle cx="40" cy="42" r="6" fill="#fff"/>
+                    <circle cx="40" cy="42" r="3" fill="#2d3436"/>
+                    <circle cx="60" cy="42" r="6" fill="#fff"/>
+                    <circle cx="60" cy="42" r="3" fill="#2d3436"/>
+                    <!-- Cheeks -->
+                    <circle cx="33" cy="54" r="4" fill="#ff7675" opacity="0.6"/>
+                    <circle cx="67" cy="54" r="4" fill="#ff7675" opacity="0.6"/>
+                    <!-- Mouth -->
+                    <path id="mascot-mouth" d="M 42 62 Q 50 70 58 62" fill="none" stroke="#d35400" stroke-width="3" stroke-linecap="round"/>
+                    <!-- Cap -->
+                    <path d="M 30 24 Q 50 10 70 24 Z" fill="#e74c3c"/>
+                    <circle cx="50" cy="12" r="5" fill="#f1c40f"/>
+                  </svg>
+                </div>
+                <div class="mascot-speech-bubble" id="mascot-speech">
+                  હાય! હું ચીંકુ વાંદરો છું. સાચો જવાબ આપો અને તારા મેળવો! 🌟
+                </div>
+              </div>
+              
+              <button class="repeat-audio-btn" id="repeat-speech-btn">
+                🔊 સવાલ ફરી સાંભળો
+              </button>
+            </div>
+          </div>
+
+          <!-- Question Content Card -->
+          <div class="quiz-card-container">
+            <div class="question-header">
+              <div class="q-number-pill" id="q-number-pill">સવાલ ૧ / ૭</div>
+              <h2 class="q-title" id="q-title">પ્રશ્ન અહીં લખાશે...</h2>
+            </div>
+
+            <!-- Visual Scene/Canvas Container -->
+            <div class="scene-stage" id="scene-stage">
+              <!-- Visual SVG illustration dynamically loaded here -->
+            </div>
+
+            <!-- Options / Action Grid -->
+            <div class="options-container" id="options-container">
+              <!-- Interactive clickable choices inserted dynamically -->
+            </div>
+
+            <!-- Instant Feedback Overlay -->
+            <div class="feedback-banner hidden" id="feedback-banner">
+              <div class="feedback-content">
+                <span class="feedback-emoji" id="feedback-emoji">🎉</span>
+                <span class="feedback-msg" id="feedback-msg">ખૂબ સરસ! સાચો જવાબ!</span>
+              </div>
+              <button class="btn-primary next-q-btn" id="next-q-btn">
+                આગળ વધો ➔
+              </button>
+            </div>
+
+          </div>
+
+        </div>
+      </section>
+
+      <!-- Sorting & Classification Interactive Activity Screen (Page 14) -->
+      <section id="screen-classification" class="game-screen">
+        <div class="classification-container">
+          <div class="class-header">
+            <div class="topic-chip"><span>🎨</span> <span>વર્ગીકરણ પ્રવૃત્તિ (Sorting Activity)</span></div>
+            <h2 id="class-title">આકારો અને રંગોને યોગ્ય ટોપલીમાં મૂકો!</h2>
+            <p id="class-desc">દરેક બટન/આકાર પર ક્લિક કરી સાચી ટોપલી પસંદ કરો.</p>
+          </div>
+
+          <div class="sorting-arena">
+            <!-- Source items to be sorted -->
+            <div class="items-source-box">
+              <div class="box-label" id="lbl-items-left">બાકી રહેલી વસ્તુઓ (Items):</div>
+              <div class="items-pool" id="items-pool">
+                <!-- Sorting items loaded here -->
+              </div>
+            </div>
+
+            <!-- Baskets / Targets -->
+            <div class="baskets-grid" id="baskets-grid">
+              <!-- Baskets rendered dynamically -->
+            </div>
+          </div>
+
+          <div class="sorting-footer">
+            <button class="btn-primary" id="finish-sort-btn" style="display: none;">
+              પરિણામ જુઓ 🏆
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Final Results & Progress Report Screen (પ્રગતિની નોંધ) -->
+      <section id="screen-results" class="game-screen">
+        <div class="results-card">
+          <div class="results-banner">
+            <div class="trophy-anim">🏆</div>
+            <h1 id="results-congrats">અભિનંદન! શાનદાર પ્રદર્શન!</h1>
+            <h2 id="results-student-name">વિદ્યાર્થી: આરાધ્યા</h2>
+            <div class="score-stars-summary" id="score-stars-summary">
+              ⭐⭐⭐⭐⭐
+            </div>
+          </div>
+
+          <!-- Official Assessment Grid (પ્રગતિની નોંધ) -->
+          <div class="report-grid-section">
+            <h3 class="grid-heading" id="lbl-report-heading">📋 પ્રગતિની નોંધ (Progress Assessment Report)</h3>
+            <p class="grid-subtext" id="lbl-report-subtext">ધોરણ ૧ ગણિત-ગમ્મત એકમ ૧ : વાંદરાં-ટોળી (GCERT માળખું)</p>
+
+            <table class="report-table">
+              <thead>
+                <tr>
+                  <th>ક્રમ</th>
+                  <th>શીખવાનો મુદ્દો / સંકલ્પના (Learning Outcome)</th>
+                  <th>પ્રગતિ (Grade)</th>
+                </tr>
+              </thead>
+              <tbody id="report-table-body">
+                <!-- Rows inserted dynamically -->
+              </tbody>
+            </table>
+          </div>
+
+          <div class="action-buttons">
+            <button class="btn-secondary" id="print-cert-btn">
+              🖨️ પ્રમાણપત્ર પ્રિન્ટ કરો (Print Certificate)
+            </button>
+            <button class="btn-primary" id="restart-game-btn">
+              🔄 ફરીથી રમો (Play Again)
+            </button>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="game-footer">
+      <span>ધોરણ ૧ ગણિત-ગમ્મત | એકમ ૧: વાંદરાં-ટોળી | Samagra Shiksha & GCERT Inspired</span>
+    </footer>
+
+  </div>
+
+  <!-- Confetti Canvas overlay -->
+  <canvas id="confetti-canvas"></canvas>
+
+  <script src="./bundle.js"></script>
+  <script type="module" src="./src/app.js"></script>
+</body>
+</html>
