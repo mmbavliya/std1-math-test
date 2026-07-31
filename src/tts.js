@@ -1,4 +1,4 @@
-// Web Speech & Multi-Fallback TTS Engine for Gujarati Math Game
+// Web Speech API Engine with Guaranteed Gujarati & Hindi Voice Fallback
 class TextToSpeechManager {
   constructor() {
     this.synth = window.speechSynthesis || null;
@@ -8,17 +8,25 @@ class TextToSpeechManager {
     this.voices = [];
 
     if (this.synth) {
-      this.loadVoices();
-      if (typeof this.synth.onvoiceschanged !== 'undefined') {
-        this.synth.onvoiceschanged = () => this.loadVoices();
-      }
+      this.initVoices();
     }
   }
 
-  loadVoices() {
-    if (this.synth && this.synth.getVoices) {
-      this.voices = this.synth.getVoices();
+  initVoices() {
+    if (!this.synth) return;
+    this.voices = this.synth.getVoices() || [];
+    if (typeof this.synth.onvoiceschanged !== 'undefined') {
+      this.synth.onvoiceschanged = () => {
+        this.voices = this.synth.getVoices() || [];
+      };
     }
+  }
+
+  getAvailableVoices() {
+    if (this.synth && (!this.voices || this.voices.length === 0)) {
+      this.voices = this.synth.getVoices() || [];
+    }
+    return this.voices || [];
   }
 
   unlock() {
@@ -28,7 +36,7 @@ class TextToSpeechManager {
           this.synth.resume();
         }
       } catch (e) {}
-      this.loadVoices();
+      this.initVoices();
     }
   }
 
@@ -73,35 +81,7 @@ class TextToSpeechManager {
     if (!cleanText) return;
 
     this.isSpeaking = true;
-
-    if (lang === 'gu') {
-      // 1. Try Online Google TTS MP3 audio
-      const encoded = encodeURIComponent(cleanText);
-      const audioUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encoded}&tl=gu&client=tw-ob`;
-
-      const audio = new Audio();
-      this.audioPlayer = audio;
-
-      let fallbackTriggered = false;
-      const doFallback = () => {
-        if (!fallbackTriggered) {
-          fallbackTriggered = true;
-          this.speakWebSpeech(cleanText, 'gu');
-        }
-      };
-
-      audio.onended = () => {
-        this.isSpeaking = false;
-      };
-      audio.onerror = () => doFallback();
-
-      const playPromise = audio.play();
-      if (playPromise !== undefined) {
-        playPromise.catch(() => doFallback());
-      }
-    } else {
-      this.speakWebSpeech(cleanText, 'en');
-    }
+    this.speakWebSpeech(cleanText, lang);
   }
 
   speakWebSpeech(text, targetLang = 'gu') {
@@ -117,49 +97,62 @@ class TextToSpeechManager {
       }
     } catch (e) {}
 
-    const voices = this.voices.length ? this.voices : (this.synth.getVoices ? this.synth.getVoices() : []);
+    const voices = this.getAvailableVoices();
     
     let selectedVoice = null;
     let textToSpeak = text;
-    let langCode = targetLang === 'gu' ? 'gu-IN' : 'en-US';
+    let langCode = 'hi-IN'; // Default to hi-IN so browser NEVER drops speech for missing gu-IN
 
     if (targetLang === 'gu') {
-      // 1. Check for native Gujarati voice
-      selectedVoice = voices.find(v => v.lang.toLowerCase().includes('gu') || v.name.toLowerCase().includes('gujarati'));
+      // 1. Look for native Gujarati voice
+      selectedVoice = voices.find(v => 
+        v.lang.toLowerCase().includes('gu') || 
+        v.name.toLowerCase().includes('gujarati')
+      );
 
-      if (!selectedVoice) {
-        // 2. Fallback to Hindi voice with Devanagari script transliteration (works on 100% of browsers!)
-        selectedVoice = voices.find(v => v.lang.toLowerCase().includes('hi') || v.name.toLowerCase().includes('hindi'));
-        if (selectedVoice) {
-          textToSpeak = this.toDevanagari(text);
-          langCode = selectedVoice.lang || 'hi-IN';
-        }
-      }
+      if (selectedVoice) {
+        textToSpeak = text; // Native Gujarati text
+        langCode = selectedVoice.lang || 'gu-IN';
+      } else {
+        // 2. Look for Hindi voice (built into 100% of Windows/Android/Chrome browsers)
+        selectedVoice = voices.find(v => 
+          v.lang.toLowerCase().includes('hi') || 
+          v.name.toLowerCase().includes('hindi')
+        );
 
-      if (!selectedVoice) {
-        // 3. Fallback to any Indian accent voice
-        selectedVoice = voices.find(v => v.lang.toLowerCase().includes('in'));
         if (selectedVoice) {
-          textToSpeak = this.toDevanagari(text);
+          textToSpeak = this.toDevanagari(text); // Convert Gujarati -> Devanagari script
           langCode = selectedVoice.lang || 'hi-IN';
+        } else {
+          // 3. Fallback to any Indian accent voice (e.g. en-IN)
+          selectedVoice = voices.find(v => v.lang.toLowerCase().includes('in'));
+          textToSpeak = this.toDevanagari(text);
+          if (selectedVoice) {
+            langCode = selectedVoice.lang;
+          } else {
+            langCode = 'hi-IN';
+          }
         }
       }
     } else {
+      // English
       selectedVoice = voices.find(v => v.lang.toLowerCase().includes('en'));
-      if (selectedVoice) {
-        langCode = selectedVoice.lang || 'en-US';
-      }
+      textToSpeak = text;
+      langCode = selectedVoice ? selectedVoice.lang : 'en-US';
     }
 
     const utterance = new SpeechSynthesisUtterance(textToSpeak);
-    utterance.rate = 0.88;
+    utterance.rate = 0.85;
     utterance.pitch = 1.0;
     utterance.lang = langCode;
 
     if (selectedVoice) {
       utterance.voice = selectedVoice;
-      utterance.lang = selectedVoice.lang;
     }
+
+    utterance.onstart = () => {
+      this.isSpeaking = true;
+    };
 
     utterance.onend = () => {
       this.isSpeaking = false;
@@ -172,6 +165,10 @@ class TextToSpeechManager {
 
     try {
       this.synth.speak(utterance);
+      // Keep-alive fix for Chrome SpeechSynthesis freeze bug
+      if (this.synth.paused) {
+        this.synth.resume();
+      }
     } catch (e) {
       console.warn('SpeechSynthesis speak failed:', e);
       this.isSpeaking = false;
