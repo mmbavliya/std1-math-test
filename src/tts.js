@@ -1,7 +1,8 @@
-// Clean, Direct & Bulletproof Web Speech Synthesizer for Math Game
+// Reliable Online & Offline Text-to-Speech Engine for Gujarati Math Game
 class TextToSpeechManager {
   constructor() {
     this.synth = window.speechSynthesis || null;
+    this.audioPlayer = null;
     this.enabled = true;
     this.isSpeaking = false;
     this.voices = [];
@@ -35,6 +36,13 @@ class TextToSpeechManager {
   }
 
   stop() {
+    if (this.audioPlayer) {
+      try {
+        this.audioPlayer.pause();
+        this.audioPlayer.currentTime = 0;
+      } catch (e) {}
+      this.audioPlayer = null;
+    }
     if (this.synth) {
       try {
         this.synth.cancel();
@@ -56,7 +64,7 @@ class TextToSpeechManager {
 
   // Transliterate Gujarati to Romanized English phonetics for Windows English voices
   toRomanized(text) {
-    const clean = text.replace(/\u0ACD/g, ''); // Strip virama
+    const clean = text.replace(/\u0ACD/g, '');
     const map = {
       'અ': 'a', 'આ': 'aa', 'ઇ': 'i', 'ઈ': 'ee', 'ઉ': 'u', 'ઊ': 'oo', 'એ': 'e', 'ઐ': 'ai', 'ઓ': 'o', 'ઔ': 'au', 'અં': 'an', 'અઃ': 'ah',
       'ક': 'k', 'ખ': 'kh', 'ગ': 'g', 'ઘ': 'gh',
@@ -76,7 +84,7 @@ class TextToSpeechManager {
   }
 
   speak(text, lang = 'gu') {
-    if (!this.enabled || !text || !this.synth) return;
+    if (!this.enabled || !text) return;
     this.stop();
 
     // Clean emojis and bracket notes for clean speech
@@ -87,32 +95,69 @@ class TextToSpeechManager {
 
     if (!cleanText) return;
 
+    this.isSpeaking = true;
+
+    if (lang === 'gu') {
+      // Stream natural Gujarati voice MP3 from Google TTS (unblocked by meta referrer no-referrer)
+      const encoded = encodeURIComponent(cleanText);
+      const audioUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encoded}&tl=gu&client=tw-ob`;
+
+      const audio = new Audio(audioUrl);
+      this.audioPlayer = audio;
+
+      let fallbackTriggered = false;
+      const doFallback = () => {
+        if (!fallbackTriggered) {
+          fallbackTriggered = true;
+          this.audioPlayer = null;
+          this.speakWebSpeech(cleanText, 'gu');
+        }
+      };
+
+      audio.onended = () => {
+        this.isSpeaking = false;
+      };
+
+      audio.onerror = () => doFallback();
+
+      const playPromise = audio.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(() => doFallback());
+      }
+    } else {
+      this.speakWebSpeech(cleanText, 'en');
+    }
+  }
+
+  speakWebSpeech(text, targetLang = 'gu') {
+    if (!this.synth) {
+      this.isSpeaking = false;
+      return;
+    }
+
     this.refreshVoices();
     const voices = this.voices;
 
     let selectedVoice = null;
-    let textToSpeak = cleanText;
+    let textToSpeak = text;
 
-    if (lang === 'gu') {
-      // 1. Try Native Gujarati Voice
+    if (targetLang === 'gu') {
       selectedVoice = voices.find(v => v.lang.toLowerCase().includes('gu') || v.name.toLowerCase().includes('gujarati'));
 
       if (selectedVoice) {
-        textToSpeak = cleanText;
+        textToSpeak = text;
       } else {
-        // 2. Try Native Hindi Voice with Devanagari text
         selectedVoice = voices.find(v => v.lang.toLowerCase().includes('hi') || v.name.toLowerCase().includes('hindi'));
         if (selectedVoice) {
-          textToSpeak = this.toDevanagari(cleanText);
+          textToSpeak = this.toDevanagari(text);
         } else {
-          // 3. Fallback to English Voice with Romanized Gujarati text
           selectedVoice = voices.find(v => v.lang.toLowerCase().includes('en')) || (voices.length > 0 ? voices[0] : null);
-          textToSpeak = this.toRomanized(cleanText);
+          textToSpeak = this.toRomanized(text);
         }
       }
     } else {
       selectedVoice = voices.find(v => v.lang.toLowerCase().includes('en')) || (voices.length > 0 ? voices[0] : null);
-      textToSpeak = cleanText;
+      textToSpeak = text;
     }
 
     const utterance = new SpeechSynthesisUtterance(textToSpeak);
@@ -123,7 +168,7 @@ class TextToSpeechManager {
       utterance.voice = selectedVoice;
       utterance.lang = selectedVoice.lang;
     } else {
-      utterance.lang = lang === 'gu' ? 'hi-IN' : 'en-US';
+      utterance.lang = targetLang === 'gu' ? 'hi-IN' : 'en-US';
     }
 
     utterance.onstart = () => {
