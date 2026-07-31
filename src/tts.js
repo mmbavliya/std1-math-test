@@ -1,32 +1,26 @@
-// Universal Instant Web Speech Engine for Math Game
+// Clean, Direct & Bulletproof Web Speech Synthesizer for Math Game
 class TextToSpeechManager {
   constructor() {
     this.synth = window.speechSynthesis || null;
-    this.audioPlayer = null;
     this.enabled = true;
     this.isSpeaking = false;
     this.voices = [];
 
     if (this.synth) {
-      this.initVoices();
+      this.refreshVoices();
+      if (typeof this.synth.onvoiceschanged !== 'undefined') {
+        this.synth.onvoiceschanged = () => this.refreshVoices();
+      }
     }
   }
 
-  initVoices() {
-    if (!this.synth) return;
-    this.voices = this.synth.getVoices() || [];
-    if (typeof this.synth.onvoiceschanged !== 'undefined') {
-      this.synth.onvoiceschanged = () => {
-        this.voices = this.synth.getVoices() || [];
-      };
+  refreshVoices() {
+    if (this.synth && typeof this.synth.getVoices === 'function') {
+      const list = this.synth.getVoices();
+      if (list && list.length > 0) {
+        this.voices = list;
+      }
     }
-  }
-
-  getAvailableVoices() {
-    if (this.synth && (!this.voices || this.voices.length === 0)) {
-      this.voices = this.synth.getVoices() || [];
-    }
-    return this.voices || [];
   }
 
   unlock() {
@@ -36,7 +30,7 @@ class TextToSpeechManager {
           this.synth.resume();
         }
       } catch (e) {}
-      this.initVoices();
+      this.refreshVoices();
     }
   }
 
@@ -60,7 +54,7 @@ class TextToSpeechManager {
     }).join('');
   }
 
-  // Transliterate Gujarati to Romanized English phonetics for Windows SAPI English voices
+  // Transliterate Gujarati to Romanized English phonetics for Windows English voices
   toRomanized(text) {
     const clean = text.replace(/\u0ACD/g, ''); // Strip virama
     const map = {
@@ -82,7 +76,7 @@ class TextToSpeechManager {
   }
 
   speak(text, lang = 'gu') {
-    if (!this.enabled || !text) return;
+    if (!this.enabled || !text || !this.synth) return;
     this.stop();
 
     // Clean emojis and bracket notes for clean speech
@@ -93,72 +87,43 @@ class TextToSpeechManager {
 
     if (!cleanText) return;
 
-    this.isSpeaking = true;
-    this.speakWebSpeech(cleanText, lang);
-  }
+    this.refreshVoices();
+    const voices = this.voices;
 
-  speakWebSpeech(text, targetLang = 'gu') {
-    if (!this.synth) {
-      this.isSpeaking = false;
-      return;
-    }
-
-    try {
-      this.synth.cancel();
-      if (this.synth.paused) {
-        this.synth.resume();
-      }
-    } catch (e) {}
-
-    const voices = this.getAvailableVoices();
-    
     let selectedVoice = null;
-    let textToSpeak = text;
-    let langCode = 'en-US';
+    let textToSpeak = cleanText;
 
-    if (targetLang === 'gu') {
-      // 1. Native Gujarati Voice
-      selectedVoice = voices.find(v => 
-        v.lang.toLowerCase().includes('gu') || 
-        v.name.toLowerCase().includes('gujarati')
-      );
+    if (lang === 'gu') {
+      // 1. Try Native Gujarati Voice
+      selectedVoice = voices.find(v => v.lang.toLowerCase().includes('gu') || v.name.toLowerCase().includes('gujarati'));
 
       if (selectedVoice) {
-        textToSpeak = text;
-        langCode = selectedVoice.lang || 'gu-IN';
+        textToSpeak = cleanText;
       } else {
-        // 2. Native Hindi Voice with Devanagari text
-        selectedVoice = voices.find(v => 
-          v.lang.toLowerCase().includes('hi') || 
-          v.name.toLowerCase().includes('hindi')
-        );
-
+        // 2. Try Native Hindi Voice with Devanagari text
+        selectedVoice = voices.find(v => v.lang.toLowerCase().includes('hi') || v.name.toLowerCase().includes('hindi'));
         if (selectedVoice) {
-          textToSpeak = this.toDevanagari(text);
-          langCode = selectedVoice.lang || 'hi-IN';
+          textToSpeak = this.toDevanagari(cleanText);
         } else {
-          // 3. Indian English / Any English Voice with Romanized Gujarati phonetics
-          selectedVoice = voices.find(v => v.lang.toLowerCase().includes('in')) || 
-                          voices.find(v => v.lang.toLowerCase().includes('en')) || 
-                          (voices.length > 0 ? voices[0] : null);
-          
-          textToSpeak = this.toRomanized(text);
-          langCode = selectedVoice ? selectedVoice.lang : 'en-US';
+          // 3. Fallback to English Voice with Romanized Gujarati text
+          selectedVoice = voices.find(v => v.lang.toLowerCase().includes('en')) || (voices.length > 0 ? voices[0] : null);
+          textToSpeak = this.toRomanized(cleanText);
         }
       }
     } else {
       selectedVoice = voices.find(v => v.lang.toLowerCase().includes('en')) || (voices.length > 0 ? voices[0] : null);
-      textToSpeak = text;
-      langCode = selectedVoice ? selectedVoice.lang : 'en-US';
+      textToSpeak = cleanText;
     }
 
     const utterance = new SpeechSynthesisUtterance(textToSpeak);
-    utterance.rate = 0.85;
+    utterance.rate = 0.88;
     utterance.pitch = 1.0;
-    utterance.lang = langCode;
 
     if (selectedVoice) {
       utterance.voice = selectedVoice;
+      utterance.lang = selectedVoice.lang;
+    } else {
+      utterance.lang = lang === 'gu' ? 'hi-IN' : 'en-US';
     }
 
     utterance.onstart = () => {
@@ -174,18 +139,14 @@ class TextToSpeechManager {
       this.isSpeaking = false;
     };
 
-    // Small delay after synth.cancel() for Chrome WebSpeech engine to reset
-    setTimeout(() => {
-      try {
-        this.synth.speak(utterance);
-        if (this.synth.paused) {
-          this.synth.resume();
-        }
-      } catch (e) {
-        console.warn('SpeechSynthesis speak failed:', e);
-        this.isSpeaking = false;
-      }
-    }, 50);
+    try {
+      this.synth.cancel();
+      this.synth.resume();
+      this.synth.speak(utterance);
+    } catch (e) {
+      console.warn('SpeechSynthesis speak error:', e);
+      this.isSpeaking = false;
+    }
   }
 
   toggle() {

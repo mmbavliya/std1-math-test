@@ -86,6 +86,7 @@ class MathApp {
     if (welcomeSpeakBtn) {
       welcomeSpeakBtn.addEventListener('click', () => {
         audioSynth.playClick();
+        tts.unlock();
         this.speakCurrentScreenContent();
       });
     }
@@ -105,12 +106,14 @@ class MathApp {
     // TTS Header Toggle button
     document.getElementById('tts-toggle-btn').addEventListener('click', () => {
       audioSynth.playClick();
+      tts.unlock();
       this.speakCurrentScreenContent();
     });
 
     // Repeat speech btn
     document.getElementById('repeat-speech-btn').addEventListener('click', () => {
       audioSynth.playClick();
+      tts.unlock();
       this.speakCurrentScreenContent();
     });
 
