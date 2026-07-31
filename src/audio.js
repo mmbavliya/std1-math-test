@@ -13,7 +13,7 @@ class AudioSynthesizer {
       }
     }
     if (this.ctx && this.ctx.state === 'suspended') {
-      this.ctx.resume();
+      this.ctx.resume().catch(e => console.warn("AudioContext resume failed:", e));
     }
   }
 
@@ -25,7 +25,7 @@ class AudioSynthesizer {
   playClick() {
     if (!this.enabled) return;
     this.init();
-    if (!this.ctx) return;
+    if (!this.ctx || this.ctx.state !== 'running') return;
 
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
@@ -47,7 +47,7 @@ class AudioSynthesizer {
   playCorrect() {
     if (!this.enabled) return;
     this.init();
-    if (!this.ctx) return;
+    if (!this.ctx || this.ctx.state !== 'running') return;
 
     const now = this.ctx.currentTime;
     const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6 (Happy Arpeggio)
@@ -73,7 +73,7 @@ class AudioSynthesizer {
   playWrong() {
     if (!this.enabled) return;
     this.init();
-    if (!this.ctx) return;
+    if (!this.ctx || this.ctx.state !== 'running') return;
 
     const now = this.ctx.currentTime;
     const osc = this.ctx.createOscillator();
@@ -96,7 +96,7 @@ class AudioSynthesizer {
   playFanfare() {
     if (!this.enabled) return;
     this.init();
-    if (!this.ctx) return;
+    if (!this.ctx || this.ctx.state !== 'running') return;
 
     const now = this.ctx.currentTime;
     const melody = [

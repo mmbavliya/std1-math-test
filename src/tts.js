@@ -5,6 +5,29 @@ class TextToSpeechManager {
     this.audioPlayer = null;
     this.enabled = true;
     this.isSpeaking = false;
+    this.voices = [];
+
+    if (this.synth) {
+      this.loadVoices();
+      if (typeof this.synth.onvoiceschanged !== 'undefined') {
+        this.synth.onvoiceschanged = () => this.loadVoices();
+      }
+    }
+  }
+
+  loadVoices() {
+    if (this.synth && this.synth.getVoices) {
+      this.voices = this.synth.getVoices();
+    }
+  }
+
+  unlock() {
+    if (this.synth) {
+      if (this.synth.paused) {
+        this.synth.resume();
+      }
+      this.loadVoices();
+    }
   }
 
   stop() {
@@ -13,8 +36,11 @@ class TextToSpeechManager {
       this.audioPlayer.currentTime = 0;
       this.audioPlayer = null;
     }
-    if (this.synth && (this.synth.speaking || this.synth.pending)) {
+    if (this.synth) {
       this.synth.cancel();
+      if (this.synth.paused) {
+        this.synth.resume();
+      }
     }
     this.isSpeaking = false;
   }
@@ -34,11 +60,13 @@ class TextToSpeechManager {
     this.isSpeaking = true;
 
     if (lang === 'gu') {
-      // Use Google Translate Gujarati TTS Audio API for crisp natural Gujarati speech
+      // First try Google Translate TTS audio API
       const encoded = encodeURIComponent(cleanText);
       const audioUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encoded}&tl=gu&client=tw-ob`;
       
-      const audio = new Audio(audioUrl);
+      const audio = new Audio();
+      audio.crossOrigin = "anonymous";
+      audio.src = audioUrl;
       this.audioPlayer = audio;
 
       audio.onended = () => {
@@ -46,7 +74,7 @@ class TextToSpeechManager {
       };
 
       audio.onerror = () => {
-        // Fallback to Web Speech API gu-IN if offline or blocked
+        // Fallback to Web Speech API gu-IN
         this.speakWebSpeech(cleanText, 'gu-IN');
       };
 
@@ -62,26 +90,44 @@ class TextToSpeechManager {
   }
 
   speakWebSpeech(text, langCode) {
-    if (!this.synth) return;
+    if (!this.synth) {
+      this.isSpeaking = false;
+      return;
+    }
+
     this.synth.cancel();
+    if (this.synth.paused) {
+      this.synth.resume();
+    }
 
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 0.85;
-    utterance.pitch = 1.05;
+    utterance.rate = 0.9;
+    utterance.pitch = 1.0;
     utterance.lang = langCode;
 
     utterance.onend = () => {
       this.isSpeaking = false;
     };
-    utterance.onerror = () => {
+
+    utterance.onerror = (e) => {
+      console.warn('SpeechSynthesis error:', e);
       this.isSpeaking = false;
     };
 
-    if (this.synth.getVoices) {
-      const voices = this.synth.getVoices();
-      const guVoice = voices.find(v => v.lang.toLowerCase().includes('gu') || v.name.toLowerCase().includes('gujarati'));
-      if (guVoice && langCode.startsWith('gu')) {
-        utterance.voice = guVoice;
+    const voices = this.voices.length ? this.voices : (this.synth.getVoices ? this.synth.getVoices() : []);
+    if (voices.length > 0) {
+      if (langCode.startsWith('gu')) {
+        let guVoice = voices.find(v => v.lang.toLowerCase().includes('gu') || v.name.toLowerCase().includes('gujarati'));
+        if (!guVoice) {
+          // Fallback to Hindi or Indian English voice if Gujarati voice is not installed on OS
+          guVoice = voices.find(v => v.lang.toLowerCase().includes('hi') || v.name.toLowerCase().includes('hindi') || v.lang.toLowerCase().includes('in'));
+        }
+        if (guVoice) {
+          utterance.voice = guVoice;
+        }
+      } else {
+        const enVoice = voices.find(v => v.lang.toLowerCase().includes('en'));
+        if (enVoice) utterance.voice = enVoice;
       }
     }
 
@@ -96,4 +142,3 @@ class TextToSpeechManager {
 }
 
 export const tts = new TextToSpeechManager();
-

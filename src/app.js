@@ -57,6 +57,18 @@ class MathApp {
   }
 
   bindEvents() {
+    // Unlock Audio Context & TTS on first user interaction (browser autoplay policy)
+    const unlockAudio = () => {
+      audioSynth.init();
+      tts.unlock();
+      window.removeEventListener('click', unlockAudio);
+      window.removeEventListener('touchstart', unlockAudio);
+      window.removeEventListener('keydown', unlockAudio);
+    };
+    window.addEventListener('click', unlockAudio);
+    window.addEventListener('touchstart', unlockAudio);
+    window.addEventListener('keydown', unlockAudio);
+
     // Start Game
     const startBtn = document.getElementById('start-game-btn');
     if (startBtn) {
