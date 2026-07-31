@@ -1,4 +1,4 @@
-// Universal Web Speech & Audio TTS Engine with 3-Tier Fallback for Gujarati
+// Universal Web Speech & Audio TTS Engine with Fast-Timeout Fallback
 class TextToSpeechManager {
   constructor() {
     this.synth = window.speechSynthesis || null;
@@ -6,6 +6,7 @@ class TextToSpeechManager {
     this.enabled = true;
     this.isSpeaking = false;
     this.voices = [];
+    this.fallbackTimer = null;
 
     if (this.synth) {
       this.initVoices();
@@ -41,6 +42,10 @@ class TextToSpeechManager {
   }
 
   stop() {
+    if (this.fallbackTimer) {
+      clearTimeout(this.fallbackTimer);
+      this.fallbackTimer = null;
+    }
     if (this.audioPlayer) {
       try {
         this.audioPlayer.pause();
@@ -70,7 +75,7 @@ class TextToSpeechManager {
     }).join('');
   }
 
-  // Transliterate Gujarati to Romanized English phonetics so English SAPI voices (Microsoft David/Zira) can read it aloud!
+  // Transliterate Gujarati to Romanized English phonetics for Windows SAPI English voices
   toRomanized(text) {
     const map = {
       'અ': 'a', 'આ': 'aa', 'ઇ': 'i', 'ઈ': 'ee', 'ઉ': 'u', 'ઊ': 'oo', 'એ': 'ek', 'ઐ': 'ai', 'ઓ': 'o', 'ઔ': 'au', 'અં': 'an', 'અઃ': 'ah',
@@ -105,32 +110,56 @@ class TextToSpeechManager {
     this.isSpeaking = true;
 
     if (lang === 'gu') {
-      // Tier 1: Try HTML5 Audio element with referrerpolicy="no-referrer" attribute
-      const encoded = encodeURIComponent(cleanText);
-      const ttsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encoded}&tl=gu&client=tw-ob`;
-
-      const audio = document.createElement('audio');
-      audio.setAttribute('referrerpolicy', 'no-referrer');
-      audio.src = ttsUrl;
-      this.audioPlayer = audio;
-
       let fallbackTriggered = false;
       const doFallback = () => {
         if (!fallbackTriggered) {
           fallbackTriggered = true;
+          if (this.fallbackTimer) {
+            clearTimeout(this.fallbackTimer);
+            this.fallbackTimer = null;
+          }
+          if (this.audioPlayer) {
+            try { this.audioPlayer.pause(); } catch(e) {}
+            this.audioPlayer = null;
+          }
           this.speakWebSpeech(cleanText, 'gu');
         }
       };
 
-      audio.onended = () => {
-        this.isSpeaking = false;
-      };
+      // Set a strict 1-second timeout: if Google online audio stalls or hangs, force WebSpeech fallback immediately!
+      this.fallbackTimer = setTimeout(() => {
+        doFallback();
+      }, 1000);
 
-      audio.onerror = () => doFallback();
+      try {
+        const encoded = encodeURIComponent(cleanText);
+        const ttsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encoded}&tl=gu&client=tw-ob`;
 
-      const playPromise = audio.play();
-      if (playPromise !== undefined) {
-        playPromise.catch(() => doFallback());
+        const audio = document.createElement('audio');
+        audio.setAttribute('referrerpolicy', 'no-referrer');
+        audio.src = ttsUrl;
+        this.audioPlayer = audio;
+
+        audio.onplaying = () => {
+          // Online audio started playing successfully, cancel fallback timer
+          if (this.fallbackTimer) {
+            clearTimeout(this.fallbackTimer);
+            this.fallbackTimer = null;
+          }
+        };
+
+        audio.onended = () => {
+          this.isSpeaking = false;
+        };
+
+        audio.onerror = () => doFallback();
+
+        const playPromise = audio.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(() => doFallback());
+        }
+      } catch (e) {
+        doFallback();
       }
     } else {
       this.speakWebSpeech(cleanText, 'en');
@@ -177,7 +206,7 @@ class TextToSpeechManager {
           textToSpeak = this.toDevanagari(text);
           langCode = selectedVoice.lang || 'hi-IN';
         } else {
-          // 3. Indian English / Any Voice with Romanized Gujarati phonetics
+          // 3. Indian English / Any English Voice with Romanized Gujarati phonetics
           selectedVoice = voices.find(v => v.lang.toLowerCase().includes('in')) || 
                           voices.find(v => v.lang.toLowerCase().includes('en')) || 
                           (voices.length > 0 ? voices[0] : null);
@@ -214,15 +243,18 @@ class TextToSpeechManager {
       this.isSpeaking = false;
     };
 
-    try {
-      this.synth.speak(utterance);
-      if (this.synth.paused) {
-        this.synth.resume();
+    // Delay speak by 50ms after synth.cancel() to prevent Chrome queue drop
+    setTimeout(() => {
+      try {
+        this.synth.speak(utterance);
+        if (this.synth.paused) {
+          this.synth.resume();
+        }
+      } catch (e) {
+        console.warn('SpeechSynthesis speak failed:', e);
+        this.isSpeaking = false;
       }
-    } catch (e) {
-      console.warn('SpeechSynthesis speak failed:', e);
-      this.isSpeaking = false;
-    }
+    }, 50);
   }
 
   toggle() {
