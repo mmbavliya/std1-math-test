@@ -1,4 +1,4 @@
-// Universal Web Speech & Audio TTS Engine with Fast-Timeout Fallback
+// Universal Instant Web Speech Engine for Math Game
 class TextToSpeechManager {
   constructor() {
     this.synth = window.speechSynthesis || null;
@@ -6,7 +6,6 @@ class TextToSpeechManager {
     this.enabled = true;
     this.isSpeaking = false;
     this.voices = [];
-    this.fallbackTimer = null;
 
     if (this.synth) {
       this.initVoices();
@@ -42,20 +41,6 @@ class TextToSpeechManager {
   }
 
   stop() {
-    if (this.fallbackTimer) {
-      clearTimeout(this.fallbackTimer);
-      this.fallbackTimer = null;
-    }
-    if (this.audioPlayer) {
-      try {
-        this.audioPlayer.pause();
-        this.audioPlayer.currentTime = 0;
-        if (this.audioPlayer.parentNode) {
-          this.audioPlayer.parentNode.removeChild(this.audioPlayer);
-        }
-      } catch (e) {}
-      this.audioPlayer = null;
-    }
     if (this.synth) {
       try {
         this.synth.cancel();
@@ -77,19 +62,20 @@ class TextToSpeechManager {
 
   // Transliterate Gujarati to Romanized English phonetics for Windows SAPI English voices
   toRomanized(text) {
+    const clean = text.replace(/\u0ACD/g, ''); // Strip virama
     const map = {
-      'અ': 'a', 'આ': 'aa', 'ઇ': 'i', 'ઈ': 'ee', 'ઉ': 'u', 'ઊ': 'oo', 'એ': 'ek', 'ઐ': 'ai', 'ઓ': 'o', 'ઔ': 'au', 'અં': 'an', 'અઃ': 'ah',
+      'અ': 'a', 'આ': 'aa', 'ઇ': 'i', 'ઈ': 'ee', 'ઉ': 'u', 'ઊ': 'oo', 'એ': 'e', 'ઐ': 'ai', 'ઓ': 'o', 'ઔ': 'au', 'અં': 'an', 'અઃ': 'ah',
       'ક': 'k', 'ખ': 'kh', 'ગ': 'g', 'ઘ': 'gh',
       'ચ': 'ch', 'છ': 'chh', 'જ': 'j', 'ઝ': 'jh',
       'ટ': 't', 'ઠ': 'th', 'ડ': 'd', 'ઢ': 'dh', 'ણ': 'n',
       'ત': 't', 'થ': 'th', 'દ': 'd', 'ધ': 'dh', 'ન': 'n',
       'પ': 'p', 'ફ': 'f', 'બ': 'b', 'ભ': 'bh', 'મ': 'm',
       'ય': 'y', 'ર': 'r', 'લ': 'l', 'વ': 'v', 'શ': 'sh', 'ષ': 'sh', 'સ': 's', 'હ': 'h', 'ળ': 'l',
-      'ા': 'aa', 'િ': 'i', 'ી': 'ee', 'ુ': 'u', 'ૂ': 'oo', 'ે': 'e', 'ૈ': 'ai', 'ો': 'o', 'ૌ': 'au', 'ં': 'n', 'ઃ': 'h', '્': ''
+      'ા': 'a', 'િ': 'i', 'ી': 'i', 'ુ': 'u', 'ૂ': 'u', 'ે': 'e', 'ૈ': 'ai', 'ો': 'o', 'ૌ': 'au', 'ં': 'n', 'ઃ': 'h'
     };
     let result = '';
-    for (let i = 0; i < text.length; i++) {
-      const char = text[i];
+    for (let i = 0; i < clean.length; i++) {
+      const char = clean[i];
       result += map[char] || char;
     }
     return result;
@@ -108,62 +94,7 @@ class TextToSpeechManager {
     if (!cleanText) return;
 
     this.isSpeaking = true;
-
-    if (lang === 'gu') {
-      let fallbackTriggered = false;
-      const doFallback = () => {
-        if (!fallbackTriggered) {
-          fallbackTriggered = true;
-          if (this.fallbackTimer) {
-            clearTimeout(this.fallbackTimer);
-            this.fallbackTimer = null;
-          }
-          if (this.audioPlayer) {
-            try { this.audioPlayer.pause(); } catch(e) {}
-            this.audioPlayer = null;
-          }
-          this.speakWebSpeech(cleanText, 'gu');
-        }
-      };
-
-      // Set a strict 1-second timeout: if Google online audio stalls or hangs, force WebSpeech fallback immediately!
-      this.fallbackTimer = setTimeout(() => {
-        doFallback();
-      }, 1000);
-
-      try {
-        const encoded = encodeURIComponent(cleanText);
-        const ttsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encoded}&tl=gu&client=tw-ob`;
-
-        const audio = document.createElement('audio');
-        audio.setAttribute('referrerpolicy', 'no-referrer');
-        audio.src = ttsUrl;
-        this.audioPlayer = audio;
-
-        audio.onplaying = () => {
-          // Online audio started playing successfully, cancel fallback timer
-          if (this.fallbackTimer) {
-            clearTimeout(this.fallbackTimer);
-            this.fallbackTimer = null;
-          }
-        };
-
-        audio.onended = () => {
-          this.isSpeaking = false;
-        };
-
-        audio.onerror = () => doFallback();
-
-        const playPromise = audio.play();
-        if (playPromise !== undefined) {
-          playPromise.catch(() => doFallback());
-        }
-      } catch (e) {
-        doFallback();
-      }
-    } else {
-      this.speakWebSpeech(cleanText, 'en');
-    }
+    this.speakWebSpeech(cleanText, lang);
   }
 
   speakWebSpeech(text, targetLang = 'gu') {
@@ -243,7 +174,7 @@ class TextToSpeechManager {
       this.isSpeaking = false;
     };
 
-    // Delay speak by 50ms after synth.cancel() to prevent Chrome queue drop
+    // Small delay after synth.cancel() for Chrome WebSpeech engine to reset
     setTimeout(() => {
       try {
         this.synth.speak(utterance);
