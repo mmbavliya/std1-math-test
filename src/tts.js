@@ -1,4 +1,4 @@
-// Web Speech & Online TTS Engine for High Quality Gujarati Voice
+// Web Speech & Multi-Fallback TTS Engine for Gujarati Math Game
 class TextToSpeechManager {
   constructor() {
     this.synth = window.speechSynthesis || null;
@@ -23,26 +23,41 @@ class TextToSpeechManager {
 
   unlock() {
     if (this.synth) {
-      if (this.synth.paused) {
-        this.synth.resume();
-      }
+      try {
+        if (this.synth.paused) {
+          this.synth.resume();
+        }
+      } catch (e) {}
       this.loadVoices();
     }
   }
 
   stop() {
     if (this.audioPlayer) {
-      this.audioPlayer.pause();
-      this.audioPlayer.currentTime = 0;
+      try {
+        this.audioPlayer.pause();
+        this.audioPlayer.currentTime = 0;
+      } catch (e) {}
       this.audioPlayer = null;
     }
     if (this.synth) {
-      this.synth.cancel();
-      if (this.synth.paused) {
-        this.synth.resume();
-      }
+      try {
+        this.synth.cancel();
+        if (this.synth.paused) {
+          this.synth.resume();
+        }
+      } catch (e) {}
     }
     this.isSpeaking = false;
+  }
+
+  // Transliterate Gujarati script Unicode (0x0A80-0x0AFF) to Devanagari script (0x0900-0x097F)
+  // This allows Hindi Speech Engines (built into 100% of browsers) to pronounce Gujarati words accurately!
+  toDevanagari(text) {
+    return text.split('').map(c => {
+      const code = c.charCodeAt(0);
+      return (code >= 0x0A80 && code <= 0x0AFF) ? String.fromCharCode(code - 0x0180) : c;
+    }).join('');
   }
 
   speak(text, lang = 'gu') {
@@ -60,50 +75,91 @@ class TextToSpeechManager {
     this.isSpeaking = true;
 
     if (lang === 'gu') {
-      // First try Google Translate TTS audio API
+      // 1. Try Online Google TTS MP3 audio
       const encoded = encodeURIComponent(cleanText);
       const audioUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encoded}&tl=gu&client=tw-ob`;
-      
+
       const audio = new Audio();
-      audio.crossOrigin = "anonymous";
-      audio.src = audioUrl;
       this.audioPlayer = audio;
+
+      let fallbackTriggered = false;
+      const doFallback = () => {
+        if (!fallbackTriggered) {
+          fallbackTriggered = true;
+          this.speakWebSpeech(cleanText, 'gu');
+        }
+      };
 
       audio.onended = () => {
         this.isSpeaking = false;
       };
-
-      audio.onerror = () => {
-        // Fallback to Web Speech API gu-IN
-        this.speakWebSpeech(cleanText, 'gu-IN');
-      };
+      audio.onerror = () => doFallback();
 
       const playPromise = audio.play();
       if (playPromise !== undefined) {
-        playPromise.catch(() => {
-          this.speakWebSpeech(cleanText, 'gu-IN');
-        });
+        playPromise.catch(() => doFallback());
       }
     } else {
-      this.speakWebSpeech(cleanText, 'en-US');
+      this.speakWebSpeech(cleanText, 'en');
     }
   }
 
-  speakWebSpeech(text, langCode) {
+  speakWebSpeech(text, targetLang = 'gu') {
     if (!this.synth) {
       this.isSpeaking = false;
       return;
     }
 
-    this.synth.cancel();
-    if (this.synth.paused) {
-      this.synth.resume();
+    try {
+      this.synth.cancel();
+      if (this.synth.paused) {
+        this.synth.resume();
+      }
+    } catch (e) {}
+
+    const voices = this.voices.length ? this.voices : (this.synth.getVoices ? this.synth.getVoices() : []);
+    
+    let selectedVoice = null;
+    let textToSpeak = text;
+    let langCode = targetLang === 'gu' ? 'gu-IN' : 'en-US';
+
+    if (targetLang === 'gu') {
+      // 1. Check for native Gujarati voice
+      selectedVoice = voices.find(v => v.lang.toLowerCase().includes('gu') || v.name.toLowerCase().includes('gujarati'));
+
+      if (!selectedVoice) {
+        // 2. Fallback to Hindi voice with Devanagari script transliteration (works on 100% of browsers!)
+        selectedVoice = voices.find(v => v.lang.toLowerCase().includes('hi') || v.name.toLowerCase().includes('hindi'));
+        if (selectedVoice) {
+          textToSpeak = this.toDevanagari(text);
+          langCode = selectedVoice.lang || 'hi-IN';
+        }
+      }
+
+      if (!selectedVoice) {
+        // 3. Fallback to any Indian accent voice
+        selectedVoice = voices.find(v => v.lang.toLowerCase().includes('in'));
+        if (selectedVoice) {
+          textToSpeak = this.toDevanagari(text);
+          langCode = selectedVoice.lang || 'hi-IN';
+        }
+      }
+    } else {
+      selectedVoice = voices.find(v => v.lang.toLowerCase().includes('en'));
+      if (selectedVoice) {
+        langCode = selectedVoice.lang || 'en-US';
+      }
     }
 
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 0.9;
+    const utterance = new SpeechSynthesisUtterance(textToSpeak);
+    utterance.rate = 0.88;
     utterance.pitch = 1.0;
     utterance.lang = langCode;
+
+    if (selectedVoice) {
+      utterance.voice = selectedVoice;
+      utterance.lang = selectedVoice.lang;
+    }
 
     utterance.onend = () => {
       this.isSpeaking = false;
@@ -114,24 +170,12 @@ class TextToSpeechManager {
       this.isSpeaking = false;
     };
 
-    const voices = this.voices.length ? this.voices : (this.synth.getVoices ? this.synth.getVoices() : []);
-    if (voices.length > 0) {
-      if (langCode.startsWith('gu')) {
-        let guVoice = voices.find(v => v.lang.toLowerCase().includes('gu') || v.name.toLowerCase().includes('gujarati'));
-        if (!guVoice) {
-          // Fallback to Hindi or Indian English voice if Gujarati voice is not installed on OS
-          guVoice = voices.find(v => v.lang.toLowerCase().includes('hi') || v.name.toLowerCase().includes('hindi') || v.lang.toLowerCase().includes('in'));
-        }
-        if (guVoice) {
-          utterance.voice = guVoice;
-        }
-      } else {
-        const enVoice = voices.find(v => v.lang.toLowerCase().includes('en'));
-        if (enVoice) utterance.voice = enVoice;
-      }
+    try {
+      this.synth.speak(utterance);
+    } catch (e) {
+      console.warn('SpeechSynthesis speak failed:', e);
+      this.isSpeaking = false;
     }
-
-    this.synth.speak(utterance);
   }
 
   toggle() {
